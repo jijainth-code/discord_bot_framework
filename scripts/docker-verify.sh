@@ -52,11 +52,7 @@ fi
 
 # Show build cache
 echo -e "\n${YELLOW}💾 Build Cache:${NC}"
-if docker builder ls >/dev/null 2>&1; then
-    docker system df --format "table {{.Type}}\t{{.Total}}\t{{.Active}}\t{{.Size}}\t{{.Reclaimable}}"
-else
-    docker system df
-fi
+docker system df 2>/dev/null || echo "Build cache information not available"
 
 # Check .dockerignore effectiveness
 echo -e "\n${YELLOW}🚫 .dockerignore Status:${NC}"
