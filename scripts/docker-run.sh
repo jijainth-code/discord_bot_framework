@@ -303,7 +303,6 @@ case "$1" in
     *)
         print_error "Unknown command: $1"
         echo "Use '$0 help' to see available commands"
-        exit 1
+                exit 1
         ;;
-esac 
 esac 
