@@ -125,10 +125,11 @@ class FunctionSelectView(discord.ui.View):
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="bot", description="Access all available worker functions")
+@bot.tree.command(name="j", description="Access all available worker functions")
 async def bot_command(interaction: discord.Interaction):
     """
     Main bot command - shows all available functions with interactive buttons
+    Usage: /j
     """
     if not function_manager.functions:
         embed = discord.Embed(

@@ -5,7 +5,7 @@ An extensible Discord bot framework that allows you to easily add new functions 
 ## 🌟 What This Bot Does
 
 - **Dynamically discovers** worker functions from the `worker_functions/` directory
-- **Lists available functions** via the `/bot` slash command  
+- **Lists available functions** via the `/j` slash command  
 - **Provides interactive UI** with buttons and modals for function execution
 
 ## 🚀 Quick Start
@@ -118,7 +118,7 @@ Each worker function must have:
 ./docker-run.sh
 ```
 
-That's it! Your function will automatically appear in the `/bot` command list after restart.
+That's it! Your function will automatically appear in the `/j` command list after restart.
 
 ## 📁 Project Structure
 ```
