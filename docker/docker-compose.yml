@@ -1,0 +1,49 @@
+services:
+  discord-bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: discord-bot-framework
+    restart: unless-stopped
+    
+    # Environment variables
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      # Add other environment variables here as needed
+      # - OTHER_VAR=${OTHER_VAR}
+    
+    # Alternative: Use env_file (commented out since we're using environment variables)
+    # env_file:
+    #   - .env
+    
+    # Volume mounts (if you want to persist logs or data)
+    # Uncomment the volumes section below if needed
+    # volumes:
+    #   - ./logs:/app/logs
+    #   - ./worker_functions:/app/worker_functions:ro
+    
+    # Network configuration
+    networks:
+      - bot-network
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+
+# Networks
+networks:
+  bot-network:
+    driver: bridge 

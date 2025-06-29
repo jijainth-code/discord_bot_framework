@@ -1,0 +1,29 @@
+services:
+  discord-bot-dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: discord-bot-dev
+    restart: "no"  # Don't auto-restart during development
+    
+    # Environment variables
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - PYTHON_ENV=development
+    
+    # Mount source code for live development
+    volumes:
+      - ../src/main.py:/app/main.py:ro
+      - ../worker_functions:/app/worker_functions:ro
+    
+    # Network configuration
+    networks:
+      - bot-dev-network
+    
+    # Override command for development
+    command: python main.py
+
+# Development network
+networks:
+  bot-dev-network:
+    driver: bridge 
