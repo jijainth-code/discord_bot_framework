@@ -2,10 +2,21 @@
 .env
 .env.*
 *.env
+.env.local
+.env.production
+.env.staging
+.env.development
 
-# Git files
-.git
+# Personal files
+STARTING.md
+PERSONAL.md
+NOTES.md
+TODO.md
+
+# Git files and history
+.git/
 .gitignore
+.gitattributes
 
 # Python cache and compiled files
 __pycache__/
@@ -25,6 +36,8 @@ parts/
 sdist/
 var/
 wheels/
+pip-wheel-metadata/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -37,13 +50,22 @@ ENV/
 env.bak/
 venv.bak/
 .venv/
+.conda/
+conda-meta/
+.python-version
 
-# IDE files
+# IDE and editor files
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.spyderproject
+.spyproject
+.rope_project/
+
+# Jupyter Notebook
+.ipynb_checkpoints
 
 # macOS files
 .DS_Store
@@ -51,35 +73,118 @@ venv.bak/
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
+Icon?
 Thumbs.db
+ehthumbs.db
 
-# Logs
+# Windows files
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux files
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# Logs and temporary files
 *.log
 logs/
-
-# Documentation (not needed in runtime)
-README.md
-*.md
-
-# Setup scripts (not needed in container)
-setup.py
-create_env.py
-
-# Test files
-test_*.py
-*_test.py
-tests/
-
-# Node modules (if any)
-node_modules/
-
-# Temporary files
+log/
 tmp/
 temp/
 *.tmp
+*.temp
+*.bak
+*.backup
+*.orig
 
-# Docker files themselves
-Dockerfile
+# Documentation (not needed in runtime)
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+LICENSE
+*.md
+*.rst
+*.txt
+!requirements.txt
+
+# Setup and development scripts
+setup.py
+create_env.py
+run.sh
+docker-run.sh
+docker_stop.sh
+
+# Test files and coverage
+test_*.py
+*_test.py
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Node.js (if any frontend tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package.json
+package-lock.json
+yarn.lock
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Configuration files not needed in container
+.editorconfig
+.flake8
+.pylintrc
+pyproject.toml
+setup.cfg
+tox.ini
+
+# Docker files themselves (avoid recursive copying)
+Dockerfile*
 .dockerignore
-docker-compose*.yml 
+docker-compose*.yml
+docker/
+
+# Build artifacts
+*.tar.gz
+*.zip
+*.rar
+
+# Cache directories
+.cache/
+*.cache
+
+# OS generated files
+.Trash-*
+.nfs*
+
+# Application specific
+bot_data/
+user_data/
+cache/
+data/
+
+# Backup files
+*~
+*.swp
+*.swo
+
+# Archive files
+*.tar
+*.gz
+*.bz2
+*.xz
+*.7z 

@@ -1,27 +1,73 @@
+version: '3.8'
+
 services:
   discord-bot-dev:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: discord-bot-dev
-    restart: "no"  # Don't auto-restart during development
+      target: runtime  # Use multi-stage build runtime target
+      # Use BuildKit for cache mounts and optimizations
+      cache_from:
+        - python:3.11-slim
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: discord-bot-framework:dev
+    container_name: discord-bot-framework-dev
+    restart: "no"  # Don't restart in development
     
     # Environment variables
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
-      - PYTHON_ENV=development
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - ENVIRONMENT=development
     
-    # Mount source code for live development
+    # Development volume mounts for live code editing
     volumes:
-      - ../src/main.py:/app/main.py:ro
-      - ../worker_functions:/app/worker_functions:ro
+      - ../src:/app:ro  # Read-only source code
+      - ../worker_functions:/app/worker_functions:ro  # Read-only worker functions
+      # Uncomment for persistent logs in development
+      # - ./dev-logs:/tmp/logs
+    
+    # Development resource limits (more generous)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.2'
+          memory: 128M
+    
+    # Security settings (less restrictive for development)
+    security_opt:
+      - no-new-privileges:true
+    # Note: Not using read-only in dev for easier debugging
+    tmpfs:
+      - /tmp:size=50m  # Larger temp space for development
+    
+    # Development logging (more verbose)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "2"
     
     # Network configuration
     networks:
       - bot-dev-network
     
-    # Override command for development
-    command: python main.py
+    # Development health check (more frequent)
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import sys; import os; sys.exit(0 if os.path.exists(\"worker_functions\") else 1)'"]
+      interval: 15s
+      timeout: 5s
+      retries: 2
+      start_period: 5s
+    
+    # Development ports (if needed for debugging)
+    ports:
+      - "8000:8000"  # Expose for potential webhook development
 
 # Development network
 networks:

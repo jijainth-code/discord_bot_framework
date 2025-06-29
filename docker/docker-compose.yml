@@ -1,30 +1,45 @@
+version: '3.8'
+
 services:
   discord-bot:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      # Use BuildKit for cache mounts and multi-stage builds
+      cache_from:
+        - python:3.11-slim
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+      # Multi-platform support (optional)
+      # platforms:
+      #   - linux/amd64
+      #   - linux/arm64
+    image: discord-bot-framework:latest
     container_name: discord-bot-framework
     restart: unless-stopped
     
     # Environment variables
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
-      # Add other environment variables here as needed
-      # - OTHER_VAR=${OTHER_VAR}
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
     
-    # Alternative: Use env_file (commented out since we're using environment variables)
-    # env_file:
-    #   - .env
+    # Resource limits for production
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
     
-    # Volume mounts (if you want to persist logs or data)
-    # Uncomment the volumes section below if needed
-    # volumes:
-    #   - ./logs:/app/logs
-    #   - ./worker_functions:/app/worker_functions:ro
-    
-    # Network configuration
-    networks:
-      - bot-network
+    # Security settings
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=10m
     
     # Logging configuration
     logging:
@@ -32,18 +47,26 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+        compress: "true"
     
-    # Resource limits (optional)
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.5'
-        reservations:
-          memory: 128M
-          cpus: '0.25'
+    # Network configuration
+    networks:
+      - bot-network
+    
+    # Health check override
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import sys; import os; sys.exit(0 if os.path.exists(\"worker_functions\") else 1)'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 # Networks
 networks:
   bot-network:
-    driver: bridge 
+    driver: bridge
+    # Network security
+    driver_opts:
+      com.docker.network.bridge.name: bot-br0
+      com.docker.network.bridge.enable_icc: "false"
+      com.docker.network.bridge.enable_ip_masquerade: "true" 

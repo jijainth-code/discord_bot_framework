@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Discord Bot Framework - Docker Run Script
-# This script handles Docker operations for the Discord bot
+# Discord Bot Framework - Docker Management Script
+# Optimized for caching, layer squashing, and minimal image size
 
 set -e  # Exit on any error
 
@@ -12,237 +12,298 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Print colored output
-print_info() {
-    echo -e "${BLUE}ℹ️  $1${NC}"
+# Configuration
+IMAGE_NAME="discord-bot-framework"
+CONTAINER_NAME="discord-bot-framework"
+DOCKERFILE_PATH="docker/Dockerfile"
+COMPOSE_FILE="docker/docker-compose.yml"
+
+# Enable Docker BuildKit for advanced caching and multi-stage builds
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+
+# Function to print colored output
+print_status() {
+    echo -e "${BLUE}[INFO]${NC} $1"
 }
 
 print_success() {
-    echo -e "${GREEN}✅ $1${NC}"
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
+    echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
 print_error() {
-    echo -e "${RED}❌ $1${NC}"
+    echo -e "${RED}[ERROR]${NC} $1"
 }
 
-print_header() {
-    echo -e "${BLUE}"
-    echo "🐳 Discord Bot Framework - Docker"
-    echo "================================"
-    echo -e "${NC}"
-}
-
-# Check if Docker is installed
-check_docker() {
-    if ! command -v docker &> /dev/null; then
-        print_error "Docker is not installed. Please install Docker first."
-        exit 1
-    fi
-    
-    if ! command -v docker-compose &> /dev/null; then
-        print_warning "docker-compose not found, using 'docker compose' instead"
-        DOCKER_COMPOSE_CMD="docker compose"
-    else
-        DOCKER_COMPOSE_CMD="docker-compose"
-    fi
-    
-    print_success "Docker is available"
-}
-
-# Check if .env file exists
+# Function to check if .env file exists
 check_env_file() {
     if [ ! -f ".env" ]; then
-        print_warning ".env file not found"
-        echo
-        print_info "Creating .env file for Docker..."
-        
-        echo "Please enter your Discord bot token:"
-        echo "(You can get this from https://discord.com/developers/applications)"
-        echo -n "Discord Bot Token: "
-        read -r discord_token
-        
-        if [ -z "$discord_token" ]; then
-            print_error "No token provided!"
-            exit 1
-        fi
-        
-        # Create .env file
-        cat > .env << EOF
-# Discord Bot Framework Environment Variables
-# Generated on: $(date)
-
-# Your Discord bot token
-DISCORD_TOKEN=$discord_token
-
-# Optional: Add other environment variables below
-EOF
-        
-        print_success ".env file created successfully!"
-    else
-        print_success ".env file found"
+        print_error ".env file not found!"
+        echo "Please create a .env file with your Discord token:"
+        echo "DISCORD_TOKEN=your_discord_bot_token_here"
+        exit 1
     fi
 }
 
-# Build Docker image
+# Function to build Docker image with optimizations
 build_image() {
-    print_info "Building Docker image..."
+    print_status "Building Discord bot Docker image with BuildKit optimizations..."
     
-    if $DOCKER_COMPOSE_CMD -f docker/docker-compose.yml build; then
+    # Build with BuildKit cache mounts and multi-stage optimization
+    docker build \
+        --file "$DOCKERFILE_PATH" \
+        --tag "$IMAGE_NAME:latest" \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        --cache-from "$IMAGE_NAME:latest" \
+        --progress=plain \
+        .
+    
+    if [ $? -eq 0 ]; then
         print_success "Docker image built successfully!"
+        
+        # Show image size
+        IMAGE_SIZE=$(docker images "$IMAGE_NAME:latest" --format "table {{.Size}}" | tail -n 1)
+        print_status "Final image size: $IMAGE_SIZE"
     else
         print_error "Failed to build Docker image"
         exit 1
     fi
 }
 
-# Run with docker-compose
-run_with_compose() {
-    print_info "Starting Discord bot with docker-compose..."
+# Function to build with layer squashing (requires experimental features)
+build_squashed() {
+    print_status "Building with layer squashing for minimal image size..."
     
-    # Source .env file to make variables available
-    set -a
-    source .env
-    set +a
+    # Check if experimental features are enabled
+    if docker version --format '{{.Server.Experimental}}' | grep -q "true"; then
+        docker build \
+            --file "$DOCKERFILE_PATH" \
+            --tag "$IMAGE_NAME:squashed" \
+            --squash \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --progress=plain \
+            .
+        
+        if [ $? -eq 0 ]; then
+            print_success "Squashed image built successfully!"
+            
+            # Compare sizes
+            NORMAL_SIZE=$(docker images "$IMAGE_NAME:latest" --format "{{.Size}}" | head -n 1)
+            SQUASHED_SIZE=$(docker images "$IMAGE_NAME:squashed" --format "{{.Size}}" | head -n 1)
+            
+            print_status "Normal image size: $NORMAL_SIZE"
+            print_status "Squashed image size: $SQUASHED_SIZE"
+        else
+            print_error "Failed to build squashed image"
+        fi
+    else
+        print_warning "Docker experimental features not enabled. Cannot use --squash"
+        print_status "To enable: Add 'experimental: true' to daemon.json"
+    fi
+}
+
+# Function to run container with optimized settings
+run_container() {
+    check_env_file
     
-    $DOCKER_COMPOSE_CMD -f docker/docker-compose.yml up -d
+    print_status "Starting Discord bot container..."
+    
+    # Stop existing container if running
+    if docker ps -q -f name="$CONTAINER_NAME" | grep -q .; then
+        print_warning "Stopping existing container..."
+        docker stop "$CONTAINER_NAME" >/dev/null 2>&1
+        docker rm "$CONTAINER_NAME" >/dev/null 2>&1
+    fi
+    
+    # Run with security and resource optimizations
+    docker run -d \
+        --name "$CONTAINER_NAME" \
+        --env-file .env \
+        --security-opt no-new-privileges:true \
+        --read-only \
+        --tmpfs /tmp:noexec,nosuid,size=10m \
+        --memory=256m \
+        --cpus=0.5 \
+        --restart=unless-stopped \
+        --log-driver=json-file \
+        --log-opt max-size=10m \
+        --log-opt max-file=3 \
+        --log-opt compress=true \
+        "$IMAGE_NAME:latest"
     
     if [ $? -eq 0 ]; then
-        print_success "Discord bot is running in the background!"
-        echo
-        print_info "Useful commands:"
-        echo "  View logs: $DOCKER_COMPOSE_CMD -f docker/docker-compose.yml logs -f"
-        echo "  Stop bot:  $DOCKER_COMPOSE_CMD -f docker/docker-compose.yml down"
-        echo "  Restart:   $DOCKER_COMPOSE_CMD -f docker/docker-compose.yml restart"
+        print_success "Discord bot started successfully!"
+        print_status "Container name: $CONTAINER_NAME"
+        print_status "Use './docker-run.sh logs' to view logs"
     else
-        print_error "Failed to start Discord bot"
+        print_error "Failed to start container"
         exit 1
     fi
 }
 
-# Stop containers
-stop_containers() {
-    print_info "Stopping Discord bot containers..."
-    $DOCKER_COMPOSE_CMD -f docker/docker-compose.yml down
-    print_success "Containers stopped"
-}
-
-# View logs
-view_logs() {
-    print_info "Showing Discord bot logs (Ctrl+C to exit)..."
-    $DOCKER_COMPOSE_CMD -f docker/docker-compose.yml logs -f
-}
-
-# Build and run
-build_and_run() {
-    build_image
-    echo
-    run_with_compose
-}
-
-# Show status
-show_status() {
-    print_info "Container status:"
-    $DOCKER_COMPOSE_CMD -f docker/docker-compose.yml ps
-}
-
-# Clean up
-cleanup() {
-    print_info "Cleaning up Docker resources..."
-    $DOCKER_COMPOSE_CMD -f docker/docker-compose.yml down -v --remove-orphans
+# Function to use docker-compose with BuildKit
+compose_up() {
+    check_env_file
     
-    # Remove image
-    echo -n "Remove Docker image as well? (y/N): "
-    read -r remove_image
+    print_status "Starting with docker-compose (BuildKit enabled)..."
     
-    if [ "$remove_image" = "y" ] || [ "$remove_image" = "Y" ]; then
-        docker rmi discord_bot_server_discord-bot 2>/dev/null || true
-        print_success "Docker image removed"
+    docker-compose -f "$COMPOSE_FILE" up -d --build
+    
+    if [ $? -eq 0 ]; then
+        print_success "Discord bot started with docker-compose!"
+    else
+        print_error "Failed to start with docker-compose"
+        exit 1
     fi
+}
+
+# Function to show container logs
+show_logs() {
+    if docker ps -q -f name="$CONTAINER_NAME" | grep -q .; then
+        print_status "Showing logs for $CONTAINER_NAME..."
+        docker logs -f "$CONTAINER_NAME"
+    else
+        print_error "Container $CONTAINER_NAME is not running"
+        exit 1
+    fi
+}
+
+# Function to show container status
+show_status() {
+    print_status "Container Status:"
+    docker ps -a --filter name="$CONTAINER_NAME" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Image}}"
+    
+    if docker ps -q -f name="$CONTAINER_NAME" | grep -q .; then
+        echo ""
+        print_status "Resource Usage:"
+        docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}" "$CONTAINER_NAME"
+        
+        echo ""
+        print_status "Health Status:"
+        docker inspect "$CONTAINER_NAME" --format='{{.State.Health.Status}}'
+    fi
+}
+
+# Function to stop container
+stop_container() {
+    if docker ps -q -f name="$CONTAINER_NAME" | grep -q .; then
+        print_status "Stopping $CONTAINER_NAME..."
+        docker stop "$CONTAINER_NAME" >/dev/null
+        print_success "Container stopped"
+    else
+        print_warning "Container $CONTAINER_NAME is not running"
+    fi
+}
+
+# Function to restart container
+restart_container() {
+    print_status "Restarting $CONTAINER_NAME..."
+    stop_container
+    sleep 2
+    run_container
+}
+
+# Function to clean up containers and images
+cleanup() {
+    print_status "Cleaning up Docker resources..."
+    
+    # Stop and remove container
+    if docker ps -a -q -f name="$CONTAINER_NAME" | grep -q .; then
+        docker stop "$CONTAINER_NAME" >/dev/null 2>&1
+        docker rm "$CONTAINER_NAME" >/dev/null 2>&1
+        print_status "Container removed"
+    fi
+    
+    # Remove images
+    if docker images -q "$IMAGE_NAME" | grep -q .; then
+        docker rmi $(docker images -q "$IMAGE_NAME") >/dev/null 2>&1
+        print_status "Images removed"
+    fi
+    
+    # Prune build cache
+    docker builder prune -f >/dev/null 2>&1
+    print_status "Build cache cleaned"
     
     print_success "Cleanup completed"
 }
 
-# Show help
+# Function to show help
 show_help() {
-    echo "Discord Bot Framework - Docker Script"
-    echo
+    echo "Discord Bot Framework - Docker Management Script"
+    echo ""
     echo "Usage: $0 [COMMAND]"
-    echo
+    echo ""
     echo "Commands:"
-    echo "  build       Build the Docker image"
-    echo "  run         Start the bot with docker-compose"
-    echo "  start       Build and run (default)"
-    echo "  stop        Stop the bot containers" 
-    echo "  restart     Restart the bot"
-    echo "  logs        View bot logs"
-    echo "  status      Show container status"
-    echo "  cleanup     Stop and remove containers/images"
-    echo "  -h, --help  Show this help message"
-    echo
+    echo "  build          Build Docker image with BuildKit optimizations"
+    echo "  build-squashed Build image with layer squashing (requires experimental)"
+    echo "  run            Start bot container with optimized settings"
+    echo "  compose        Start with docker-compose (recommended)"
+    echo "  stop           Stop the bot container"
+    echo "  restart        Restart the bot container"
+    echo "  logs           Show container logs (follow mode)"
+    echo "  status         Show container status and resource usage"
+    echo "  cleanup        Remove containers, images, and build cache"
+    echo "  help           Show this help message"
+    echo ""
+    echo "BuildKit Features:"
+    echo "  - Multi-stage builds for smaller images"
+    echo "  - Build cache mounts for faster rebuilds"
+    echo "  - Layer squashing for minimal size (experimental)"
+    echo "  - Optimized Dockerfile for production"
+    echo ""
     echo "Examples:"
-    echo "  $0           # Build and run"
-    echo "  $0 build     # Just build image"
-    echo "  $0 logs      # View logs"
-    echo "  $0 stop      # Stop containers"
+    echo "  $0 build                 # Build optimized image"
+    echo "  $0 compose               # Start with docker-compose"
+    echo "  $0 logs                  # View live logs"
+    echo "  $0 build-squashed        # Build minimal size image"
 }
 
-# Main execution
-main() {
-    print_header
-    check_docker
-    check_env_file
-    echo
-}
-
-# Parse command line arguments
-case "${1:-start}" in
-    build)
-        main
+# Main script logic
+case "$1" in
+    "build")
         build_image
         ;;
-    run)
-        main
-        run_with_compose
+    "build-squashed")
+        build_image
+        build_squashed
         ;;
-    start|"")
-        main
-        build_and_run
+    "run")
+        run_container
         ;;
-    stop)
-        print_header
-        check_docker
-        stop_containers
+    "compose")
+        compose_up
         ;;
-    restart)
-        print_header
-        check_docker
-        print_info "Restarting Discord bot..."
-        $DOCKER_COMPOSE_CMD -f docker/docker-compose.yml restart
-        print_success "Bot restarted"
+    "stop")
+        stop_container
         ;;
-    logs)
-        check_docker
-        view_logs
+    "restart")
+        restart_container
         ;;
-    status)
-        check_docker
+    "logs")
+        show_logs
+        ;;
+    "status")
         show_status
         ;;
-    cleanup)
-        print_header
-        check_docker
+    "cleanup")
         cleanup
         ;;
-    -h|--help)
+    "help"|"--help"|"-h")
         show_help
+        ;;
+    "")
+        # Default action: build and run with compose
+        print_status "No command specified. Building and starting with docker-compose..."
+        compose_up
         ;;
     *)
         print_error "Unknown command: $1"
-        echo "Use --help for usage information"
+        echo "Use '$0 help' to see available commands"
         exit 1
         ;;
+esac 
 esac 

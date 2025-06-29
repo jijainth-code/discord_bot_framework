@@ -1,50 +1,78 @@
-# Use Python slim image for smaller size
-FROM python:3.11-slim AS base
+# syntax=docker/dockerfile:1.4
+# Multi-stage build for optimized caching and minimal final image
 
-# Set environment variables for Python optimization
+#==============================================================================
+# BUILD STAGE: Install dependencies and prepare application
+#==============================================================================
+FROM python:3.11-slim AS builder
+
+# Set environment variables for build optimization
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install system dependencies in a separate layer for better caching
+# Install system dependencies and build tools in single layer
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
+    build-essential \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # Create app directory
 WORKDIR /app
 
-# Create non-root user early for security
-RUN groupadd -r botuser && useradd -r -g botuser botuser
-
-# Copy requirements first for better Docker layer caching
-# This layer will be cached unless requirements.txt changes
+# Copy and install Python dependencies with cache mount for faster rebuilds
 COPY requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --user --no-warn-script-location -r requirements.txt
 
-# Install Python dependencies in a separate layer
-RUN pip install --no-cache-dir -r requirements.txt
+#==============================================================================
+# RUNTIME STAGE: Minimal production image
+#==============================================================================
+FROM python:3.11-slim AS runtime
 
-# Copy application code
-# This layer will be rebuilt when source code changes
-COPY src/main.py .
-COPY worker_functions/ ./worker_functions/
-COPY scripts/run.sh .
+# Set production environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/home/botuser/.local/bin:$PATH" \
+    USER=botuser \
+    UID=1001 \
+    GID=1001
 
-# Make run.sh executable
-RUN chmod +x run.sh
+# Create non-root user and setup directories in single layer
+RUN groupadd -g $GID $USER \
+    && useradd -u $UID -g $GID -m -d /home/$USER -s /bin/bash $USER \
+    && mkdir -p /app \
+    && chown -R $USER:$USER /app
 
-# Change ownership to non-root user
-RUN chown -R botuser:botuser /app
+# Set working directory
+WORKDIR /app
+
+# Copy Python packages from builder stage
+COPY --from=builder --chown=$USER:$USER /root/.local /home/$USER/.local
+
+# Copy application code with proper ownership
+COPY --chown=$USER:$USER src/main.py .
+COPY --chown=$USER:$USER worker_functions/ ./worker_functions/
 
 # Switch to non-root user for security
-USER botuser
+USER $USER
 
-# Health check to ensure the bot is running
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import sys; sys.exit(0)"
+# Add metadata labels for better image management
+LABEL maintainer="Discord Bot Framework" \
+      version="1.0" \
+      description="Extensible Discord bot with worker functions" \
+      org.opencontainers.image.source="https://github.com/jijainth-code/discord_bot_framework"
 
-# Expose port (if needed for future webhook functionality)
+# Health check to ensure the bot is running properly
+HEALTHCHECK --interval=30s \
+            --timeout=10s \
+            --start-period=5s \
+            --retries=3 \
+    CMD python -c "import sys; import os; sys.exit(0 if os.path.exists('worker_functions') else 1)"
+
+# Expose port for future webhook functionality (optional)
 EXPOSE 8000
 
-# Set the default command
+# Use exec form for better signal handling
 CMD ["python", "main.py"] 
